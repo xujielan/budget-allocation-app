@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Budget Allocation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+
+        .panel {
+            min-height: 400px; /* Give panels a minimum height */
+        }
+
+        .block {
+            width: 5.5rem; /* Set a fixed width for blocks */
+            height: 2.5rem;
+            margin: 0.25rem;
+            cursor: grab;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: 500;
+            border-radius: 0.375rem; /* Rounded corners */
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        .block.dragging {
+            opacity: 0.5;
+        }
+
+        .block-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: flex-end; /* This is the key change to stack blocks from the bottom */
+            padding: 0.5rem;
+            min-height: 100px;
+        }
+        
+        .panel-header, .panel-footer {
+            min-height: 60px; /* Ensure consistent height */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="container mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">City Service Budget Allocation</h1>
+            <p class="text-gray-600 mt-2">Drag and drop budget blocks to reallocate funds between services.</p>
+        </header>
+
+        <!-- Wrapper to handle horizontal scrolling on smaller screens -->
+        <div class="w-full overflow-x-auto pb-4">
+             <div class="grid grid-cols-5 gap-4 min-w-[1200px]" id="main-container">
+                <!-- Panels will be dynamically generated here -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const services = [
+            { id: 'ttc', name: 'TTC & Wheel-Trans', blocks: 30, color: 'bg-red-500' },
+            { id: 'police', name: 'Police', blocks: 28, color: 'bg-blue-500' },
+            { id: 'housing', name: 'Affordable Housing & Shelter', blocks: 24, color: 'bg-orange-500' },
+            { id: 'fire', name: 'Fire Service', blocks: 13, color: 'bg-purple-500' },
+            { id: 'parks', name: 'Parks & Recreation', blocks: 8, color: 'bg-green-500' }
+        ];
+
+        const BLOCK_VALUE = 40000000; // 40 Million
+        const mainContainer = document.getElementById('main-container');
+        let draggedBlock = null;
+
+        function initializeApp() {
+            // Generate panels and blocks
+            services.forEach(service => {
+                const panel = document.createElement('div');
+                panel.id = service.id;
+                panel.className = 'panel bg-white rounded-lg shadow-md flex flex-col text-center';
+                panel.innerHTML = `
+                    <div class="panel-header p-4 border-b">
+                        <h2 class="font-semibold text-lg text-gray-700">${service.name}</h2>
+                        <p id="${service.id}-budget" class="font-bold text-2xl text-gray-900"></p>
+                    </div>
+                    <div id="${service.id}-blocks" class="block-container flex-grow"></div>
+                    <div class="panel-footer p-4 border-t">
+                        <p id="${service.id}-percentage" class="font-semibold text-xl text-gray-800"></p>
+                    </div>
+                `;
+                mainContainer.appendChild(panel);
+
+                const blockContainer = document.getElementById(`${service.id}-blocks`);
+                for (let i = 0; i < service.blocks; i++) {
+                    const block = document.createElement('div');
+                    block.className = `block ${service.color}`;
+                    block.textContent = '$40M';
+                    block.draggable = true;
+                    block.dataset.id = `${service.id}-block-${i}`;
+                    blockContainer.appendChild(block);
+                }
+            });
+
+            addDragListeners();
+            updateAllCalculations();
+        }
+
+        function addDragListeners() {
+            const blocks = document.querySelectorAll('.block');
+            const panels = document.querySelectorAll('.panel .block-container');
+
+            blocks.forEach(block => {
+                block.addEventListener('dragstart', (e) => {
+                    draggedBlock = e.target;
+                    setTimeout(() => {
+                        e.target.classList.add('dragging');
+                    }, 0);
+                });
+
+                block.addEventListener('dragend', () => {
+                    draggedBlock.classList.remove('dragging');
+                    draggedBlock = null;
+                });
+            });
+
+            panels.forEach(container => {
+                container.addEventListener('dragover', e => {
+                    e.preventDefault();
+                });
+
+                container.addEventListener('drop', e => {
+                    e.preventDefault();
+                    if (draggedBlock && e.currentTarget.contains(draggedBlock) === false) {
+                        e.currentTarget.appendChild(draggedBlock);
+                        updateAllCalculations();
+                    }
+                });
+            });
+        }
+
+
+        function updateAllCalculations() {
+            const totalBlocks = services.reduce((sum, service) => {
+                const panel = document.getElementById(`${service.id}-blocks`);
+                return sum + panel.children.length;
+            }, 0);
+            
+            const totalBudget = totalBlocks * BLOCK_VALUE;
+
+            services.forEach(service => {
+                const blockContainer = document.getElementById(`${service.id}-blocks`);
+                const blockCount = blockContainer.children.length;
+                const budget = blockCount * BLOCK_VALUE;
+                const percentage = totalBudget > 0 ? (budget / totalBudget) * 100 : 0;
+
+                document.getElementById(`${service.id}-budget`).textContent = formatCurrency(budget);
+                document.getElementById(`${service.id}-percentage`).textContent = `${percentage.toFixed(0)}%`;
+            });
+        }
+        
+        function formatCurrency(value) {
+            if (value >= 1000000000) {
+                return `$${(value / 1000000000).toFixed(2)} billion`;
+            }
+            return `$${(value / 1000000).toFixed(0)} million`;
+        }
+
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>
+

@@ -52,7 +52,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 flex flex-col items-center justify-center min-h-screen p-4 lg:p-8">
+<body class="bg-slate-50 text-slate-800 flex flex-col items-center min-h-screen p-4 lg:p-8">
 
     <!-- Reset and Refresh Button -->
     <div class="fixed top-6 left-6 z-50">
@@ -96,12 +96,12 @@
 
     <script>
         // --- DATA and CONFIGURATION ---
-        const BLOCK_VALUE = 50000000; // Each block represents $50 million
+        const BLOCK_VALUE = 50000000; 
         const servicesData = [
             { id: 'ttc', name: 'TTC & WheelTrans', blocks: 28, color: 'bg-red-600' },
             { id: 'police', name: 'Police', blocks: 26, color: 'bg-blue-600' },
             { id: 'housing', name: 'Affordable Housing & Shelters', blocks: 16, color: 'bg-amber-600' },
-            { id: 'fire', name: 'Fire Services', blocks: 11, color: 'bg-purple-600' },
+            { id: 'fire', name: 'Fire Services', blocks: 11, color: 'bg-purple-700' },
             { id: 'parks', name: 'Parks & Recreation', blocks: 8, color: 'bg-emerald-600' },
             { id: 'roads', name: 'Roads, bike lanes, sidewalks', blocks: 6, color: 'bg-stone-600' },
             { id: 'libraries', name: 'Libraries', blocks: 5, color: 'bg-indigo-700' },
@@ -112,6 +112,10 @@
         let draggedBlock = null; 
         let pickedUpBlock = null; 
         let originalPanelId = null;
+        
+        let isDragging = false;
+        let touchStartX = 0;
+        let touchStartY = 0;
         let touchOffsetX = 0;
         let touchOffsetY = 0;
 
@@ -159,6 +163,7 @@
 
         function handleDragEnd(e) {
             e.target.classList.remove('dragging');
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
             draggedBlock = null;
             originalPanelId = null;
         }
@@ -194,53 +199,73 @@
         
         // --- TOUCH DRAG & DROP HANDLERS ---
         function handleTouchStart(e) {
-            e.preventDefault();
-            draggedBlock = e.target.closest('.budget-block');
-            if (!draggedBlock) return;
-
+            const block = e.target.closest('.budget-block');
+            if (!block) return;
+            
+            draggedBlock = block;
             originalPanelId = draggedBlock.closest('.service-panel').id;
             const touch = e.touches[0];
-            const rect = draggedBlock.getBoundingClientRect();
-            touchOffsetX = touch.clientX - rect.left;
-            touchOffsetY = touch.clientY - rect.top;
-
-            draggedBlock.classList.add('dragging');
-            draggedBlock.style.position = 'absolute';
-            draggedBlock.style.zIndex = '1000';
-            document.body.appendChild(draggedBlock);
-            handleTouchMove(e);
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            isDragging = false; 
         }
 
         function handleTouchMove(e) {
-            e.preventDefault();
             if (!draggedBlock) return;
-
-            const touch = e.touches[0];
-            draggedBlock.style.left = `${touch.clientX - touchOffsetX}px`;
-            draggedBlock.style.top = `${touch.clientY - touchOffsetY}px`;
-
-            draggedBlock.style.pointerEvents = 'none';
-            const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
-            draggedBlock.style.pointerEvents = 'auto';
-
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
             
-            if (elementUnder) {
-                const dropZone = elementUnder.closest('.block-container');
-                if (dropZone) dropZone.classList.add('drag-over');
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+
+            if (!isDragging) {
+                // Start dragging only if moved more horizontally than vertically and passed a threshold
+                if (Math.abs(deltaX) > Math.abs(deltaY) && Math.sqrt(deltaX**2 + deltaY**2) > 10) {
+                    isDragging = true;
+                    
+                    const rect = draggedBlock.getBoundingClientRect();
+                    touchOffsetX = touch.clientX - rect.left;
+                    touchOffsetY = touch.clientY - rect.top;
+
+                    draggedBlock.classList.add('dragging');
+                    draggedBlock.style.position = 'absolute';
+                    draggedBlock.style.zIndex = '1000';
+                    document.body.appendChild(draggedBlock);
+                } else if (Math.abs(deltaY) > Math.abs(deltaX)) {
+                    // User is likely scrolling, so cancel the drag
+                    draggedBlock = null;
+                    return;
+                }
+            }
+            
+            if (isDragging) {
+                e.preventDefault(); 
+                draggedBlock.style.left = `${touch.clientX - touchOffsetX}px`;
+                draggedBlock.style.top = `${touch.clientY - touchOffsetY}px`;
+                
+                draggedBlock.style.pointerEvents = 'none';
+                const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+                draggedBlock.style.pointerEvents = 'auto';
+
+                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                if (elementUnder) {
+                    const dropZone = elementUnder.closest('.block-container');
+                    if (dropZone) dropZone.classList.add('drag-over');
+                }
             }
         }
 
         function handleTouchEnd(e) {
-            if (!draggedBlock) return;
+            if (!draggedBlock || !isDragging) {
+                draggedBlock = null;
+                return;
+            }
 
-            draggedBlock.style.pointerEvents = 'none';
             const touch = e.changedTouches[0];
+            draggedBlock.style.pointerEvents = 'none';
             const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
             draggedBlock.style.pointerEvents = 'auto';
             
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-
             const dropZone = elementUnder ? elementUnder.closest('.block-container') : null;
             const targetPanel = dropZone ? dropZone.closest('.service-panel') : null;
 
@@ -264,6 +289,7 @@
             
             draggedBlock = null;
             originalPanelId = null;
+            isDragging = false;
             updateAllPanels();
         }
 
@@ -339,7 +365,7 @@
                     block.addEventListener('dragstart', handleDragStart);
                     block.addEventListener('dragend', handleDragEnd);
                     block.addEventListener('keydown', handleBlockKeyDown);
-                    block.addEventListener('touchstart', handleTouchStart, { passive: false });
+                    block.addEventListener('touchstart', handleTouchStart, { passive: true });
 
                     blockContainer.appendChild(block);
                 }

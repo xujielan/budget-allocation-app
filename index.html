@@ -101,7 +101,7 @@
             { id: 'ttc', name: 'TTC & WheelTrans', blocks: 28, color: 'bg-red-600' },
             { id: 'police', name: 'Police', blocks: 26, color: 'bg-blue-600' },
             { id: 'housing', name: 'Affordable Housing & Shelters', blocks: 16, color: 'bg-amber-600' },
-            { id: 'fire', name: 'Fire Services', blocks: 11, color: 'bg-purple-700' },
+            { id: 'fire', name: 'Fire Services', blocks: 11, color: 'bg-purple-600' },
             { id: 'parks', name: 'Parks & Recreation', blocks: 8, color: 'bg-emerald-600' },
             { id: 'roads', name: 'Roads, bike lanes, sidewalks', blocks: 6, color: 'bg-stone-600' },
             { id: 'libraries', name: 'Libraries', blocks: 5, color: 'bg-indigo-700' },
@@ -109,38 +109,26 @@
         ];
 
         // --- GLOBAL STATE ---
-        let draggedBlock = null; // For mouse drag-and-drop
-        let pickedUpBlock = null; // For keyboard interaction
+        let draggedBlock = null; 
+        let pickedUpBlock = null; 
         let originalPanelId = null;
+        let touchOffsetX = 0;
+        let touchOffsetY = 0;
 
         // --- DOM ELEMENTS ---
         const servicesContainer = document.getElementById('services-container');
         const srAnnouncer = document.getElementById('sr-announcement');
 
         // --- UTILITY FUNCTIONS ---
-        /**
-         * Formats a large number into a readable currency string (e.g., $1.20 billion).
-         * @param {number} value The number to format.
-         * @returns {string} The formatted currency string.
-         */
         function formatCurrency(value) {
-            if (value >= 1_000_000_000) {
-                return `$${(value / 1_000_000_000).toFixed(2)} billion`;
-            }
-            if (value >= 1_000_000) {
-                return `$${(value / 1_000_000)} million`;
-            }
+            if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)} billion`;
+            if (value >= 1_000_000) return `$${(value / 1_000_000)} million`;
             return `$${value.toLocaleString()}`;
         }
 
         // --- CORE LOGIC ---
-        /**
-         * Recalculates and updates the budget and percentage for all service panels.
-         */
         function updateAllPanels() {
-            const allBlocks = document.querySelectorAll('.budget-block');
-            const totalBlocks = allBlocks.length;
-
+            const totalBlocks = document.querySelectorAll('.budget-block').length;
             servicesData.forEach(service => {
                 const panel = document.getElementById(`panel-${service.id}`);
                 if (!panel) return;
@@ -148,7 +136,6 @@
                 const blockContainer = panel.querySelector('.block-container');
                 const budgetDisplay = panel.querySelector('.budget-display');
                 const percentageDisplay = panel.querySelector('.percentage-display');
-
                 const currentBlocksCount = blockContainer.children.length;
                 const currentBudget = currentBlocksCount * BLOCK_VALUE;
                 const currentPercentage = totalBlocks > 0 ? (currentBlocksCount / totalBlocks) * 100 : 0;
@@ -158,24 +145,16 @@
             });
         }
         
-        /**
-         * Announces changes to screen readers.
-         * @param {string} message The message to announce.
-         */
         function announce(message) {
             srAnnouncer.textContent = message;
-            // Clear after a moment to allow repeated announcements of the same text
             setTimeout(() => { srAnnouncer.textContent = ''; }, 500);
         }
 
-        // --- EVENT HANDLERS (DRAG & DROP) ---
+        // --- MOUSE DRAG & DROP HANDLERS ---
         function handleDragStart(e) {
             draggedBlock = e.target;
             originalPanelId = e.target.closest('.service-panel').id;
-            // Add a slight delay to allow the browser to render the drag image
-            setTimeout(() => {
-                e.target.classList.add('dragging');
-            }, 0);
+            setTimeout(() => e.target.classList.add('dragging'), 0);
         }
 
         function handleDragEnd(e) {
@@ -185,7 +164,7 @@
         }
 
         function handleDragOver(e) {
-            e.preventDefault(); // Necessary to allow dropping
+            e.preventDefault();
             const dropZone = e.target.closest('.block-container');
             if (draggedBlock && dropZone && dropZone !== draggedBlock.parentElement) {
                  dropZone.classList.add('drag-over');
@@ -194,9 +173,7 @@
 
         function handleDragLeave(e) {
             const dropZone = e.target.closest('.block-container');
-             if (dropZone) {
-                dropZone.classList.remove('drag-over');
-            }
+             if (dropZone) dropZone.classList.remove('drag-over');
         }
 
         function handleDrop(e) {
@@ -205,12 +182,9 @@
             if (dropZone && draggedBlock) {
                 dropZone.classList.remove('drag-over');
                 const targetPanel = dropZone.closest('.service-panel');
-
-                // Only move if it's a new panel
                 if (targetPanel.id !== originalPanelId) {
                     dropZone.appendChild(draggedBlock);
                     updateAllPanels();
-                    
                     const sourcePanelName = document.querySelector(`#${originalPanelId} h2`).textContent;
                     const targetPanelName = targetPanel.querySelector('h2').textContent;
                     announce(`Moved a $50 million block from ${sourcePanelName} to ${targetPanelName}.`);
@@ -218,7 +192,82 @@
             }
         }
         
-        // --- EVENT HANDLERS (KEYBOARD ACCESSIBILITY) ---
+        // --- TOUCH DRAG & DROP HANDLERS ---
+        function handleTouchStart(e) {
+            e.preventDefault();
+            draggedBlock = e.target.closest('.budget-block');
+            if (!draggedBlock) return;
+
+            originalPanelId = draggedBlock.closest('.service-panel').id;
+            const touch = e.touches[0];
+            const rect = draggedBlock.getBoundingClientRect();
+            touchOffsetX = touch.clientX - rect.left;
+            touchOffsetY = touch.clientY - rect.top;
+
+            draggedBlock.classList.add('dragging');
+            draggedBlock.style.position = 'absolute';
+            draggedBlock.style.zIndex = '1000';
+            document.body.appendChild(draggedBlock);
+            handleTouchMove(e);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!draggedBlock) return;
+
+            const touch = e.touches[0];
+            draggedBlock.style.left = `${touch.clientX - touchOffsetX}px`;
+            draggedBlock.style.top = `${touch.clientY - touchOffsetY}px`;
+
+            draggedBlock.style.pointerEvents = 'none';
+            const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+            draggedBlock.style.pointerEvents = 'auto';
+
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            
+            if (elementUnder) {
+                const dropZone = elementUnder.closest('.block-container');
+                if (dropZone) dropZone.classList.add('drag-over');
+            }
+        }
+
+        function handleTouchEnd(e) {
+            if (!draggedBlock) return;
+
+            draggedBlock.style.pointerEvents = 'none';
+            const touch = e.changedTouches[0];
+            const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+            draggedBlock.style.pointerEvents = 'auto';
+            
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+
+            const dropZone = elementUnder ? elementUnder.closest('.block-container') : null;
+            const targetPanel = dropZone ? dropZone.closest('.service-panel') : null;
+
+            if (dropZone && targetPanel && targetPanel.id !== originalPanelId) {
+                dropZone.appendChild(draggedBlock);
+                const sourcePanelName = document.querySelector(`#${originalPanelId} h2`).textContent;
+                const targetPanelName = targetPanel.querySelector('h2').textContent;
+                announce(`Moved a $50 million block from ${sourcePanelName} to ${targetPanelName}.`);
+            } else {
+                const originalContainer = document.querySelector(`#${originalPanelId} .block-container`);
+                originalContainer.appendChild(draggedBlock);
+                const panelName = document.querySelector(`#${originalPanelId} h2`).textContent;
+                announce(`Block returned to ${panelName}.`);
+            }
+            
+            draggedBlock.classList.remove('dragging');
+            draggedBlock.style.position = '';
+            draggedBlock.style.left = '';
+            draggedBlock.style.top = '';
+            draggedBlock.style.zIndex = '';
+            
+            draggedBlock = null;
+            originalPanelId = null;
+            updateAllPanels();
+        }
+
+        // --- KEYBOARD ACCESSIBILITY HANDLERS ---
         function handleBlockKeyDown(e) {
             if (e.key === 'Enter' && !pickedUpBlock) {
                 e.preventDefault();
@@ -230,7 +279,6 @@
             } 
             else if (e.key === 'Enter' && pickedUpBlock) {
                  e.preventDefault();
-                 // This case is handled by the panel keydown listener.
             }
             else if (e.key === 'Escape' && pickedUpBlock) {
                 e.preventDefault();
@@ -257,7 +305,7 @@
                 }
 
                 pickedUpBlock.classList.remove('picked-up');
-                pickedUpBlock.focus(); // Return focus to the block
+                pickedUpBlock.focus();
                 pickedUpBlock = null;
                 originalPanelId = null;
             }
@@ -275,8 +323,7 @@
                 panel.innerHTML = `
                     <h2 class="font-bold text-center text-sm md:text-base ${service.color.replace('bg-', 'text-')} h-14 flex items-center justify-center">${service.name}</h2>
                     <p class="budget-display text-xl md:text-2xl font-bold text-center my-2 text-slate-800" aria-live="polite"></p>
-                    <div class="block-container flex-grow flex flex-wrap-reverse content-start justify-start gap-1 p-1 mx-auto" style="max-width: 4.25rem;">
-                    </div>
+                    <div class="block-container flex-grow flex flex-wrap-reverse content-start justify-start gap-1 p-1 mx-auto" style="max-width: 4.25rem;"></div>
                     <p class="percentage-display text-lg md:text-xl font-bold text-center mt-2 text-slate-700" aria-live="polite"></p>
                 `;
 
@@ -292,6 +339,7 @@
                     block.addEventListener('dragstart', handleDragStart);
                     block.addEventListener('dragend', handleDragEnd);
                     block.addEventListener('keydown', handleBlockKeyDown);
+                    block.addEventListener('touchstart', handleTouchStart, { passive: false });
 
                     blockContainer.appendChild(block);
                 }
@@ -301,14 +349,11 @@
                 dropZone.addEventListener('dragover', handleDragOver);
                 dropZone.addEventListener('dragleave', handleDragLeave);
                 dropZone.addEventListener('drop', handleDrop);
-
                 servicesContainer.appendChild(panel);
             });
-
             updateAllPanels();
         }
 
-        // --- NEW BUTTONS LOGIC ---
         function setupActionButtons() {
             const resetButton = document.getElementById('reset-btn');
             const screenshotButton = document.getElementById('screenshot-btn');
@@ -320,14 +365,12 @@
 
             screenshotButton.addEventListener('click', () => {
                 const captureArea = document.getElementById('capture-area');
-                
                 resetButton.style.visibility = 'hidden';
                 screenshotButton.style.visibility = 'hidden';
-                
                 announce('Taking screenshot.');
 
                 html2canvas(captureArea, {
-                    backgroundColor: '#f8fafc', // Corresponds to Tailwind's bg-slate-50
+                    backgroundColor: '#f8fafc',
                     useCORS: true,
                 }).then(canvas => {
                     const imageURL = canvas.toDataURL('image/png');
@@ -355,6 +398,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             initialize();
             setupActionButtons();
+            document.addEventListener('touchmove', handleTouchMove, { passive: false });
+            document.addEventListener('touchend', handleTouchEnd);
         });
     </script>
 </body>

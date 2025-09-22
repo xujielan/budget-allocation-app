@@ -104,8 +104,8 @@
             { id: 'fire', name: 'Fire Services', blocks: 11, color: 'bg-purple-700' },
             { id: 'parks', name: 'Parks & Recreation', blocks: 8, color: 'bg-emerald-600' },
             { id: 'roads', name: 'Roads, bike lanes, sidewalks', blocks: 6, color: 'bg-stone-600' },
-            { id: 'libraries', name: 'Libraries', blocks: 5, color: 'bg-indigo-700' },
-            { id: 'paramedics', name: 'Paramedics', blocks: 3, color: 'bg-pink-600' },
+            { id: 'libraries', name: 'Libraries', blocks: 5, color: 'bg-lime-600' },
+            { id: 'paramedics', name: 'Paramedics', blocks: 3, color: 'bg-indigo-700' },
         ];
 
         // --- GLOBAL STATE ---
@@ -113,7 +113,7 @@
         let pickedUpBlock = null; 
         let originalPanelId = null;
         
-        let isDragging = false;
+        let isTouchDragging = false;
         let touchStartX = 0;
         let touchStartY = 0;
         let touchOffsetX = 0;
@@ -207,7 +207,7 @@
             const touch = e.touches[0];
             touchStartX = touch.clientX;
             touchStartY = touch.clientY;
-            isDragging = false; 
+            isTouchDragging = false; 
         }
 
         function handleTouchMove(e) {
@@ -217,27 +217,26 @@
             const deltaX = touch.clientX - touchStartX;
             const deltaY = touch.clientY - touchStartY;
 
-            if (!isDragging) {
-                // Start dragging only if moved more horizontally than vertically and passed a threshold
-                if (Math.abs(deltaX) > Math.abs(deltaY) && Math.sqrt(deltaX**2 + deltaY**2) > 10) {
-                    isDragging = true;
+            if (!isTouchDragging) {
+                if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+                    isTouchDragging = true;
+                    e.preventDefault(); 
                     
                     const rect = draggedBlock.getBoundingClientRect();
                     touchOffsetX = touch.clientX - rect.left;
                     touchOffsetY = touch.clientY - rect.top;
 
                     draggedBlock.classList.add('dragging');
-                    draggedBlock.style.position = 'absolute';
+                    draggedBlock.style.position = 'fixed';
                     draggedBlock.style.zIndex = '1000';
                     document.body.appendChild(draggedBlock);
                 } else if (Math.abs(deltaY) > Math.abs(deltaX)) {
-                    // User is likely scrolling, so cancel the drag
-                    draggedBlock = null;
+                    draggedBlock = null; // It's a scroll, cancel drag
                     return;
                 }
             }
             
-            if (isDragging) {
+            if (isTouchDragging) {
                 e.preventDefault(); 
                 draggedBlock.style.left = `${touch.clientX - touchOffsetX}px`;
                 draggedBlock.style.top = `${touch.clientY - touchOffsetY}px`;
@@ -255,8 +254,9 @@
         }
 
         function handleTouchEnd(e) {
-            if (!draggedBlock || !isDragging) {
+            if (!draggedBlock || !isTouchDragging) {
                 draggedBlock = null;
+                isTouchDragging = false;
                 return;
             }
 
@@ -277,8 +277,6 @@
             } else {
                 const originalContainer = document.querySelector(`#${originalPanelId} .block-container`);
                 originalContainer.appendChild(draggedBlock);
-                const panelName = document.querySelector(`#${originalPanelId} h2`).textContent;
-                announce(`Block returned to ${panelName}.`);
             }
             
             draggedBlock.classList.remove('dragging');
@@ -289,7 +287,7 @@
             
             draggedBlock = null;
             originalPanelId = null;
-            isDragging = false;
+            isTouchDragging = false;
             updateAllPanels();
         }
 

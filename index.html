@@ -16,6 +16,7 @@
             font-family: 'Inter', sans-serif;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            touch-action: pan-y; /* Allow vertical scrolling by default */
         }
 
         /* Styling for the budget blocks */
@@ -49,6 +50,7 @@
         /* Highlight potential drop zones */
         .drag-over {
             background-color: #e0f2fe; /* Light blue highlight */
+            border-color: #0ea5e9; /* Tailwind sky-500 */
         }
     </style>
 </head>
@@ -104,7 +106,7 @@
             { id: 'fire', name: 'Fire Services', blocks: 11, color: 'bg-purple-700' },
             { id: 'parks', name: 'Parks & Recreation', blocks: 8, color: 'bg-emerald-600' },
             { id: 'roads', name: 'Roads, bike lanes, sidewalks', blocks: 6, color: 'bg-stone-600' },
-            { id: 'libraries', name: 'Libraries', blocks: 5, color: 'bg-lime-600' },
+            { id: 'libraries', name: 'Libraries', blocks: 5, color: 'bg-lime-700' }, // Updated for WCAG AA
             { id: 'paramedics', name: 'Paramedics', blocks: 3, color: 'bg-indigo-700' },
         ];
 
@@ -113,6 +115,7 @@
         let pickedUpBlock = null; 
         let originalPanelId = null;
         
+        // Touch state
         let isTouchDragging = false;
         let touchStartX = 0;
         let touchStartY = 0;
@@ -170,24 +173,24 @@
 
         function handleDragOver(e) {
             e.preventDefault();
-            const dropZone = e.target.closest('.block-container');
-            if (draggedBlock && dropZone && dropZone !== draggedBlock.parentElement) {
-                 dropZone.classList.add('drag-over');
+            const panel = e.target.closest('.service-panel');
+            if (draggedBlock && panel && panel.id !== originalPanelId) {
+                 panel.classList.add('drag-over');
             }
         }
 
         function handleDragLeave(e) {
-            const dropZone = e.target.closest('.block-container');
-             if (dropZone) dropZone.classList.remove('drag-over');
+            const panel = e.target.closest('.service-panel');
+             if (panel) panel.classList.remove('drag-over');
         }
 
         function handleDrop(e) {
             e.preventDefault();
-            const dropZone = e.target.closest('.block-container');
-            if (dropZone && draggedBlock) {
-                dropZone.classList.remove('drag-over');
-                const targetPanel = dropZone.closest('.service-panel');
+            const targetPanel = e.currentTarget; // The panel is now the drop target
+            if (targetPanel && draggedBlock) {
+                targetPanel.classList.remove('drag-over');
                 if (targetPanel.id !== originalPanelId) {
+                    const dropZone = targetPanel.querySelector('.block-container');
                     dropZone.appendChild(draggedBlock);
                     updateAllPanels();
                     const sourcePanelName = document.querySelector(`#${originalPanelId} h2`).textContent;
@@ -218,73 +221,78 @@
             const deltaY = touch.clientY - touchStartY;
 
             if (!isTouchDragging) {
-                if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+                 // Prioritize vertical scroll unless it's a clear horizontal drag
+                if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
                     isTouchDragging = true;
-                    e.preventDefault(); 
+                    // Prevent page scroll only when dragging starts
+                    document.body.style.touchAction = 'none';
                     
                     const rect = draggedBlock.getBoundingClientRect();
                     touchOffsetX = touch.clientX - rect.left;
                     touchOffsetY = touch.clientY - rect.top;
 
+                    // Clone the block for a smoother visual drag effect
+                    const clone = draggedBlock.cloneNode(true);
                     draggedBlock.classList.add('dragging');
-                    draggedBlock.style.position = 'fixed';
-                    draggedBlock.style.zIndex = '1000';
-                    document.body.appendChild(draggedBlock);
-                } else if (Math.abs(deltaY) > Math.abs(deltaX)) {
-                    draggedBlock = null; // It's a scroll, cancel drag
+                    clone.id = 'drag-clone';
+                    clone.style.position = 'fixed';
+                    clone.style.zIndex = '1000';
+                    clone.style.pointerEvents = 'none'; // Clone shouldn't interfere with drop target detection
+                    document.body.appendChild(clone);
+                } else if (Math.abs(deltaY) > 10) {
+                    // It's a scroll, cancel the drag
+                    draggedBlock = null; 
                     return;
                 }
             }
             
             if (isTouchDragging) {
-                e.preventDefault(); 
-                draggedBlock.style.left = `${touch.clientX - touchOffsetX}px`;
-                draggedBlock.style.top = `${touch.clientY - touchOffsetY}px`;
-                
-                draggedBlock.style.pointerEvents = 'none';
-                const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
-                draggedBlock.style.pointerEvents = 'auto';
+                e.preventDefault(); // Prevent scroll while actively dragging
+                const clone = document.getElementById('drag-clone');
+                if (!clone) return;
 
+                clone.style.left = `${touch.clientX - touchOffsetX}px`;
+                clone.style.top = `${touch.clientY - touchOffsetY}px`;
+                
                 document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
                 if (elementUnder) {
-                    const dropZone = elementUnder.closest('.block-container');
-                    if (dropZone) dropZone.classList.add('drag-over');
+                    const dropPanel = elementUnder.closest('.service-panel');
+                    if (dropPanel && dropPanel.id !== originalPanelId) {
+                        dropPanel.classList.add('drag-over');
+                    }
                 }
             }
         }
 
         function handleTouchEnd(e) {
+             // Re-enable page scrolling
+            document.body.style.touchAction = 'pan-y';
+            const clone = document.getElementById('drag-clone');
+            if(clone) clone.remove();
+
             if (!draggedBlock || !isTouchDragging) {
+                if(draggedBlock) draggedBlock.classList.remove('dragging');
                 draggedBlock = null;
                 isTouchDragging = false;
                 return;
             }
 
             const touch = e.changedTouches[0];
-            draggedBlock.style.pointerEvents = 'none';
             const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY);
-            draggedBlock.style.pointerEvents = 'auto';
             
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-            const dropZone = elementUnder ? elementUnder.closest('.block-container') : null;
-            const targetPanel = dropZone ? dropZone.closest('.service-panel') : null;
+            const targetPanel = elementUnder ? elementUnder.closest('.service-panel') : null;
 
-            if (dropZone && targetPanel && targetPanel.id !== originalPanelId) {
+            if (targetPanel && targetPanel.id !== originalPanelId) {
+                const dropZone = targetPanel.querySelector('.block-container');
                 dropZone.appendChild(draggedBlock);
                 const sourcePanelName = document.querySelector(`#${originalPanelId} h2`).textContent;
                 const targetPanelName = targetPanel.querySelector('h2').textContent;
                 announce(`Moved a $50 million block from ${sourcePanelName} to ${targetPanelName}.`);
-            } else {
-                const originalContainer = document.querySelector(`#${originalPanelId} .block-container`);
-                originalContainer.appendChild(draggedBlock);
-            }
+            } 
             
             draggedBlock.classList.remove('dragging');
-            draggedBlock.style.position = '';
-            draggedBlock.style.left = '';
-            draggedBlock.style.top = '';
-            draggedBlock.style.zIndex = '';
-            
             draggedBlock = null;
             originalPanelId = null;
             isTouchDragging = false;
@@ -301,13 +309,11 @@
                 const panelName = document.querySelector(`#${originalPanelId} h2`).textContent;
                 announce(`Picked up a $50 million block from ${panelName}. Use Tab to select a new service panel and press Enter to drop.`);
             } 
-            else if (e.key === 'Enter' && pickedUpBlock) {
-                 e.preventDefault();
-            }
             else if (e.key === 'Escape' && pickedUpBlock) {
                 e.preventDefault();
                 pickedUpBlock.classList.remove('picked-up');
                 announce(`Cancelled moving block. It remains in ${document.querySelector(`#${originalPanelId} h2`).textContent}.`);
+                pickedUpBlock.focus();
                 pickedUpBlock = null;
                 originalPanelId = null;
             }
@@ -340,7 +346,7 @@
             servicesData.forEach(service => {
                 const panel = document.createElement('div');
                 panel.id = `panel-${service.id}`;
-                panel.className = 'service-panel bg-slate-100 border border-slate-300 rounded-lg p-3 flex flex-col h-full min-h-[400px]';
+                panel.className = 'service-panel bg-slate-100 border-2 border-slate-300 rounded-lg p-3 flex flex-col h-full min-h-[400px] transition-colors';
                 panel.setAttribute('tabindex', '0');
                 panel.setAttribute('aria-label', `${service.name}. Press Enter to drop a selected budget block here.`);
 
@@ -369,10 +375,10 @@
                 }
 
                 panel.addEventListener('keydown', handlePanelKeyDown);
-                const dropZone = panel.querySelector('.block-container');
-                dropZone.addEventListener('dragover', handleDragOver);
-                dropZone.addEventListener('dragleave', handleDragLeave);
-                dropZone.addEventListener('drop', handleDrop);
+                // Attach drop listeners to the entire panel
+                panel.addEventListener('dragover', handleDragOver);
+                panel.addEventListener('dragleave', handleDragLeave);
+                panel.addEventListener('drop', handleDrop);
                 servicesContainer.appendChild(panel);
             });
             updateAllPanels();
@@ -394,7 +400,7 @@
                 announce('Taking screenshot.');
 
                 html2canvas(captureArea, {
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: '#f8fafc', // bg-slate-50
                     useCORS: true,
                 }).then(canvas => {
                     const imageURL = canvas.toDataURL('image/png');
